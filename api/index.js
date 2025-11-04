@@ -4,9 +4,8 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const path = require("path");
-const { connectDB } = require("../config/db");
 
-// Routes
+const { connectDB } = require("../config/db");
 const productRoutes = require("../routes/productRoutes");
 const customerRoutes = require("../routes/customerRoutes");
 const adminRoutes = require("../routes/adminRoutes");
@@ -27,35 +26,15 @@ const app = express();
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "4mb" }));
 app.use(helmet());
+app.options("*", cors());
+app.use(cors());
 
-// ✅ CORS Configuration
-const allowedOrigins = [
-  "https://bamboo-frontend-jdzq.onrender.com", // your frontend on Render
-  "http://localhost:3000",                     // local dev
-];
-
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // allow requests with no origin (like Postman)
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-    credentials: true,
-  })
-);
-
-// ✅ Root route
+// Root route
 app.get("/", (req, res) => {
   res.send("App works properly!");
 });
 
-// ✅ API ROUTES
+// ✅ API ROUTES - Place all API routes here
 app.use("/api/products/", productRoutes);
 app.use("/api/category/", categoryRoutes);
 app.use("/api/coupon/", couponRoutes);
@@ -69,34 +48,36 @@ app.use("/api/notification/", isAuth, notificationRoutes);
 app.use("/api/admin/", adminRoutes);
 app.use("/api/orders/", orderRoutes);
 
-// ✅ Serve static files from the "public" directory
+// Serve static files from the "public" directory
 app.use("/static", express.static("public"));
 
-// ✅ Serve frontend only in production
+// ✅ Serve frontend only in production - This should be LAST
 if (process.env.NODE_ENV === "production") {
   const buildPath = path.join(__dirname, "build");
   app.use(express.static(buildPath));
 
-  // Catch-all handler for production
+  // Catch-all handler for production: send back React's index.html file.
   app.get("*", (req, res) => {
     res.sendFile(path.join(buildPath, "index.html"));
   });
 } else {
-  // Development fallback
+  // Development catch-all handler
   app.get("*", (req, res) => {
-    if (!req.path.startsWith("/api/")) {
+    // Only return the generic message for unmatched routes that aren't API routes
+    if (!req.path.startsWith('/api/')) {
       res.send("Backend API is running fine 👍");
     } else {
+      // For unmatched API routes, return 404
       res.status(404).json({ message: "API endpoint not found" });
     }
   });
 }
 
-// ✅ Error handler
+// Error handling middleware
 app.use((err, req, res, next) => {
   if (res.headersSent) return next(err);
   res.status(400).json({ message: err.message });
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`server running on port ${PORT}`));
