@@ -26,8 +26,29 @@ const app = express();
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "4mb" }));
 app.use(helmet());
+const allowedOrigins = [
+  "https://bamboo-frontend-jdzq.onrender.com", // your deployed frontend
+  "http://localhost:3000" // for local testing
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like curl or mobile apps)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        return callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+  })
+);
+
+// Optional: explicitly handle preflight requests for all routes
 app.options("*", cors());
-app.use(cors());
+
 
 // Root route
 app.get("/", (req, res) => {
