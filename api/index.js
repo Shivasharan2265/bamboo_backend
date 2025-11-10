@@ -33,6 +33,7 @@ app.use(cors({
     'http://localhost:4100',
     'http://localhost:5055',
     'http://localhost:5173',
+    'https://bamboo-frontend-jdzq.onrender.com/'
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
