@@ -18,6 +18,7 @@ const settingRoutes = require("../routes/settingRoutes");
 const currencyRoutes = require("../routes/currencyRoutes");
 const languageRoutes = require("../routes/languageRoutes");
 const notificationRoutes = require("../routes/notificationRoutes");
+const blogRoutes = require("../routes/blogRoutes");
 const { isAuth, isAdmin } = require("../config/auth");
 
 connectDB();
@@ -26,28 +27,17 @@ const app = express();
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "4mb" }));
 app.use(helmet());
-const allowedOrigins = [
-  "https://bamboo-frontend-jdzq.onrender.com", // your deployed frontend
-  "http://localhost:3000" // for local testing
-];
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // Allow requests with no origin (like curl or mobile apps)
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      } else {
-        return callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-  })
-);
-
-// Optional: explicitly handle preflight requests for all routes
-app.options("*", cors());
+app.use(cors({
+  origin: [
+    'http://localhost:4100',
+    'http://localhost:5055',
+    'http://localhost:5173',
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
 
 
 // Root route
@@ -68,6 +58,7 @@ app.use("/api/language/", languageRoutes);
 app.use("/api/notification/", isAuth, notificationRoutes);
 app.use("/api/admin/", adminRoutes);
 app.use("/api/orders/", orderRoutes);
+app.use("/api/blogs/", blogRoutes);
 
 // Serve static files from the "public" directory
 app.use("/static", express.static("public"));
