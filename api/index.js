@@ -40,6 +40,7 @@ app.use(cors({
     'https://bamboo-backend-l209.onrender.com/',
     'https://bamboo.tek2grow.com/',
     'https://bamboo.tek2grow.com/admin',
+    // 'jgjg'
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
