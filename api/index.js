@@ -19,6 +19,9 @@ const currencyRoutes = require("../routes/currencyRoutes");
 const languageRoutes = require("../routes/languageRoutes");
 const notificationRoutes = require("../routes/notificationRoutes");
 const blogRoutes = require("../routes/blogRoutes");
+const addressRoutes = require("../routes/addressRoutes");
+
+const wishlistRoutes = require("../routes/wishlistRoutes");
 const { isAuth, isAdmin } = require("../config/auth");
 
 connectDB();
@@ -35,6 +38,8 @@ app.use(cors({
     'http://localhost:5173',
     'https://bamboo-frontend-jdzq.onrender.com/',
     'https://bamboo-backend-l209.onrender.com/',
+    'https://bamboo.tek2grow.com/',
+    'https://bamboo.tek2grow.com/admin',
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -61,6 +66,8 @@ app.use("/api/notification/", isAuth, notificationRoutes);
 app.use("/api/admin/", adminRoutes);
 app.use("/api/orders/", orderRoutes);
 app.use("/api/blogs/", blogRoutes);
+app.use("/api/wishlist/", wishlistRoutes);
+app.use("/api/address/", isAuth, addressRoutes);
 
 // Serve static files from the "public" directory
 app.use("/static", express.static("public"));
