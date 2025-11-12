@@ -38,7 +38,7 @@ app.use(cors({
     'http://localhost:5173',
     'https://bamboo-frontend-jdzq.onrender.com/',
     'https://bamboo-backend-l209.onrender.com/',
-    'https://bamboo.tek2grow.com/',
+    'https://bamboo.tek2grow.com/api',
     'https://bamboo.tek2grow.com/admin',
     // 'jgjg'
   ],
