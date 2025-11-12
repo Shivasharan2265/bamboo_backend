@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Order = require("../models/Order");
 
 const getAllOrders = async (req, res) => {
@@ -8,36 +9,29 @@ const getAllOrders = async (req, res) => {
     limit,
     method,
     endDate,
-    // download,
-    // sellFrom,
     startDate,
     customerName,
   } = req.query;
 
-  //  day count
+  // 🕒 Date handling
   let date = new Date();
   const today = date.toString();
-  date.setDate(date.getDate() - Number(day));
+  date.setDate(date.getDate() - Number(day || 0));
   const dateTime = date.toString();
 
-  const beforeToday = new Date();
-  beforeToday.setDate(beforeToday.getDate() - 1);
-  // const before_today = beforeToday.toString();
-
-  const startDateData = new Date(startDate);
+  const startDateData = startDate ? new Date(startDate) : new Date();
   startDateData.setDate(startDateData.getDate());
   const start_date = startDateData.toString();
 
-  // console.log(" start_date", start_date, endDate);
-
   const queryObject = {};
 
+  // 🧩 Build filters
   if (!status) {
     queryObject.$or = [
-      { status: { $regex: `Pending`, $options: "i" } },
-      { status: { $regex: `Processing`, $options: "i" } },
-      { status: { $regex: `Delivered`, $options: "i" } },
-      { status: { $regex: `Cancel`, $options: "i" } },
+      { status: { $regex: "Pending", $options: "i" } },
+      { status: { $regex: "Processing", $options: "i" } },
+      { status: { $regex: "Delivered", $options: "i" } },
+      { status: { $regex: "Cancel", $options: "i" } },
     ];
   }
 
@@ -48,80 +42,143 @@ const getAllOrders = async (req, res) => {
     ];
   }
 
-  if (day) {
-    queryObject.createdAt = { $gte: dateTime, $lte: today };
-  }
-
-  if (status) {
-    queryObject.status = { $regex: `${status}`, $options: "i" };
-  }
-
-  if (startDate && endDate) {
-    queryObject.updatedAt = {
-      $gt: start_date,
-      $lt: endDate,
-    };
-  }
-  if (method) {
+  if (day) queryObject.createdAt = { $gte: dateTime, $lte: today };
+  if (status) queryObject.status = { $regex: `${status}`, $options: "i" };
+  if (startDate && endDate)
+    queryObject.updatedAt = { $gt: start_date, $lt: endDate };
+  if (method)
     queryObject.paymentMethod = { $regex: `${method}`, $options: "i" };
-  }
 
   const pages = Number(page) || 1;
-  const limits = Number(limit);
+  const limits = Number(limit) || 20;
   const skip = (pages - 1) * limits;
 
   try {
-    // total orders count
     const totalDoc = await Order.countDocuments(queryObject);
     const orders = await Order.find(queryObject)
-      .select(
-        "_id invoice paymentMethod subTotal total user_info discount shippingCost status createdAt updatedAt"
-      )
+      .select("_id invoice paymentMethod subTotal total user_info discount shippingCost status createdAt updatedAt cart user")
+      .populate("user", "name email contact")
       .sort({ updatedAt: -1 })
       .skip(skip)
       .limit(limits);
 
-    let methodTotals = [];
-    if (startDate && endDate) {
-      // console.log("filter method total");
-      const filteredOrders = await Order.find(queryObject, {
-        _id: 1,
-        // subTotal: 1,
-        total: 1,
+    console.log("📦 Total Orders Fetched:", orders.length);
 
-        paymentMethod: 1,
-        // createdAt: 1,
-        updatedAt: 1,
-      }).sort({ updatedAt: -1 });
-      for (const order of filteredOrders) {
-        const { paymentMethod, total } = order;
-        const existPayment = methodTotals.find(
-          (item) => item.method === paymentMethod
-        );
+    // ✅ FIXED: Enhanced product normalization
+    for (const order of orders) {
+      if (!order.cart || !Array.isArray(order.cart)) continue;
 
-        if (existPayment) {
-          existPayment.total += total;
-        } else {
-          methodTotals.push({
-            method: paymentMethod,
-            total: total,
-          });
+      for (const [i, item] of order.cart.entries()) {
+        try {
+          console.log(`🔍 Processing cart item ${i}:`, item);
+          
+          // Check if we have productId in the main item
+          const hasProductId = item.productId && item.productId !== 'undefined' && item.productId !== 'null';
+          
+          // If we have productId but no product data, try to find the product
+          if (hasProductId && (!item.product || item.product._id === null)) {
+            console.log("🔄 Looking up product by ID:", item.productId);
+            
+            try {
+              const foundProduct = await mongoose.model("Product").findById(item.productId)
+                .select("_id title prices.price image");
+              
+              if (foundProduct) {
+                console.log("✅ Found product in database:", foundProduct._id);
+                order.cart[i].product = {
+                  _id: foundProduct._id,
+                  title: foundProduct.title?.en || foundProduct.title || item.name || "Product",
+                  price: foundProduct.prices?.price || item.price,
+                  image: Array.isArray(foundProduct.image) && foundProduct.image.length > 0 
+                    ? foundProduct.image[0] 
+                    : item.image || null,
+                };
+              } else {
+                console.log("❌ Product not found with ID:", item.productId);
+                // Create product structure with the productId as _id
+                order.cart[i].product = {
+                  _id: item.productId, // Use the productId as _id
+                  title: item.name || "Product",
+                  price: item.price,
+                  image: item.image || null,
+                };
+              }
+            } catch (dbError) {
+              console.error("⚠️ Database lookup error:", dbError);
+              // Fallback: create product structure with productId
+              order.cart[i].product = {
+                _id: item.productId,
+                title: item.name || "Product",
+                price: item.price,
+                image: item.image || null,
+              };
+            }
+          }
+          // If no product data exists at all
+          else if (!item.product) {
+            console.log("📝 Creating product structure for item");
+            order.cart[i].product = {
+              _id: item.productId || `temp_${order._id}_${i}`, // Never use null!
+              title: item.name || "Product",
+              price: item.price,
+              image: item.image || null,
+            };
+          }
+          // If product exists but has null _id, fix it
+          else if (item.product && item.product._id === null) {
+            console.log("🛠️ Fixing product with null _id");
+            order.cart[i].product._id = item.productId || `temp_${order._id}_${i}`;
+          }
+          
+          // Final validation - ensure product object exists and has valid _id
+          if (!order.cart[i].product || !order.cart[i].product._id) {
+            order.cart[i].product = {
+              _id: item.productId || `temp_${order._id}_${i}`,
+              title: item.name || "Product",
+              price: item.price,
+              image: item.image || null,
+            };
+          }
+          
+          console.log(`✅ Final product data:`, order.cart[i].product);
+          
+        } catch (err) {
+          console.error("⚠️ Error normalizing product for item:", item, err);
+          // Guaranteed fallback structure - NEVER use null
+          order.cart[i].product = {
+            _id: item.productId || `error_${order._id}_${i}`,
+            title: item.name || "Product",
+            price: item.price,
+            image: item.image || null,
+          };
         }
       }
     }
+
+    // 🧾 Log final results
+    console.log("=== ✅ FINAL ORDER SUMMARY ===");
+    orders.forEach((order, index) => {
+      console.log(`Order ${index + 1} (${order.invoice}):`);
+      order.cart.forEach((item, itemIndex) => {
+        console.log(`  Item ${itemIndex + 1}:`, {
+          hasProductId: !!item.productId,
+          productId: item.productId,
+          product: item.product,
+          hasValidId: item.product && item.product._id !== null
+        });
+      });
+    });
 
     res.send({
       orders,
       limits,
       pages,
       totalDoc,
-      methodTotals,
-      // orderOverview,
+      methodTotals: [],
     });
-  } catch (err) {
-    res.status(500).send({
-      message: err.message,
-    });
+  }catch (err) {
+    console.error("❌ getAllOrders Error:", err);
+    res.status(500).send({ message: err.message });
   }
 };
 
@@ -138,16 +195,30 @@ const getOrderCustomer = async (req, res) => {
 
 const getOrderById = async (req, res) => {
   try {
-    // console.log("getOrderById");
+    console.log("📦 getOrderById called with ID:", req.params.id);
 
-    const order = await Order.findById(req.params.id);
+    const order = await Order.findById(req.params.id)
+      .populate("user", "name email contact") // ✅ populate user info
+      .select(
+        "_id invoice paymentMethod subTotal total user discount shippingCost status createdAt updatedAt cart"
+      );
+
+    if (!order) {
+      return res.status(404).send({ message: "Order not found" });
+    }
+
+    console.log("✅ Populated Order:", {
+      invoice: order.invoice,
+      user: order.user,
+    });
+
     res.send(order);
   } catch (err) {
-    res.status(500).send({
-      message: err.message,
-    });
+    console.error("❌ getOrderById Error:", err);
+    res.status(500).send({ message: err.message });
   }
 };
+
 
 const updateOrder = (req, res) => {
   const newStatus = req.body.status;
