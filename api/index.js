@@ -1,5 +1,6 @@
 require("dotenv").config();
 console.log("✅ ENCRYPT_PASSWORD =", process.env.ENCRYPT_PASSWORD);
+
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -20,40 +21,44 @@ const languageRoutes = require("../routes/languageRoutes");
 const notificationRoutes = require("../routes/notificationRoutes");
 const blogRoutes = require("../routes/blogRoutes");
 const addressRoutes = require("../routes/addressRoutes");
-
 const wishlistRoutes = require("../routes/wishlistRoutes");
+
 const { isAuth, isAdmin } = require("../config/auth");
 
+// ✅ Connect to MongoDB
 connectDB();
-const app = express();
 
+const app = express();
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "4mb" }));
 app.use(helmet());
 
-app.use(cors({
-  origin: [
-    'http://localhost:4100',
-    'http://localhost:5055',
-    'http://localhost:5173',
-    'https://bamboo-frontend-jdzq.onrender.com/',
-    'https://bamboo-backend-l209.onrender.com/',
-    'https://bamboo.tek2grow.com/api',
-    'https://bamboo.tek2grow.com/admin',
-    // 'jgjg'
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
+// ✅ Allow CORS for all origins
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.header(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+  );
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With"
+  );
+  res.header("Access-Control-Allow-Credentials", "true");
 
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
 
-// Root route
+  next();
+});
+
+// ✅ Root route
 app.get("/", (req, res) => {
   res.send("App works properly!");
 });
 
-// ✅ API ROUTES - Place all API routes here
+// ✅ API ROUTES
 app.use("/api/products/", productRoutes);
 app.use("/api/category/", categoryRoutes);
 app.use("/api/coupon/", couponRoutes);
@@ -70,36 +75,35 @@ app.use("/api/blogs/", blogRoutes);
 app.use("/api/wishlist/", wishlistRoutes);
 app.use("/api/address/", isAuth, addressRoutes);
 
-// Serve static files from the "public" directory
+// ✅ Serve static files from /public
 app.use("/static", express.static("public"));
 
-// ✅ Serve frontend only in production - This should be LAST
+// ✅ Serve frontend (for production)
 if (process.env.NODE_ENV === "production") {
   const buildPath = path.join(__dirname, "build");
   app.use(express.static(buildPath));
 
-  // Catch-all handler for production: send back React's index.html file.
   app.get("*", (req, res) => {
     res.sendFile(path.join(buildPath, "index.html"));
   });
 } else {
-  // Development catch-all handler
+  // Development fallback
   app.get("*", (req, res) => {
-    // Only return the generic message for unmatched routes that aren't API routes
-    if (!req.path.startsWith('/api/')) {
+    if (!req.path.startsWith("/api/")) {
       res.send("Backend API is running fine 👍");
     } else {
-      // For unmatched API routes, return 404
       res.status(404).json({ message: "API endpoint not found" });
     }
   });
 }
 
-// Error handling middleware
+// ✅ Global error handler
 app.use((err, req, res, next) => {
   if (res.headersSent) return next(err);
+  console.error("❌ Global Error:", err.message);
   res.status(400).json({ message: err.message });
 });
 
+// ✅ Start server
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
