@@ -1,6 +1,8 @@
 const Product = require("../models/Product");
 const mongoose = require("mongoose");
 const Category = require("../models/Category");
+const Attribute = require("../models/Attribute");
+
 const { languageCodes } = require("../utils/data");
 
 const addProduct = async (req, res) => {
@@ -139,44 +141,82 @@ const getProductBySlug = async (req, res) => {
 
 const getProductById = async (req, res) => {
   console.log("🟢 getProductById called with ID:", req.params.id);
-  
+
   try {
-    // Validate the ID format
-    if (!req.params.id || req.params.id === 'undefined') {
+    // Validate ID
+    if (!req.params.id || req.params.id === "undefined") {
       console.log("❌ Invalid product ID");
-      return res.status(400).send({
-        message: "Invalid product ID",
-      });
+      return res.status(400).send({ message: "Invalid product ID" });
     }
 
     console.log("🔍 Searching for product with ID:", req.params.id);
-    
-    const product = await Product.findById(req.params.id)
-      .populate({ path: "category", select: "_id, name" })
+
+    let product = await Product.findById(req.params.id)
+      .populate({ path: "category", select: "_id name" })
       .populate({ path: "categories", select: "_id name" });
 
     console.log("📦 Product found:", product ? "Yes" : "No");
-    
+
     if (!product) {
       console.log("❌ Product not found in database");
-      return res.status(404).send({
-        message: "Product not found!",
+      return res.status(404).send({ message: "Product not found!" });
+    }
+
+    // 🟡 Only process variants if product has combinations
+    if (product.isCombination && Array.isArray(product.variants)) {
+      console.log("🔄 Processing variants...");
+
+      // Get all attributes
+      const attributes = await Attribute.find({ status: "show" });
+
+      // Build a map of choiceId -> { value, attributeName }
+      const choiceMap = {};
+
+      attributes.forEach((attr) => {
+        // attr.variants contains choices
+        attr.variants.forEach((choice) => {
+          choiceMap[choice._id] = {
+            attributeName: attr.name?.en || attr.title?.en,
+            value: choice.name?.en || choice.title?.en
+          };
+        });
+      });
+
+      // Transform variants into readable format
+      product = product.toObject(); // Convert from Mongoose doc to plain object
+
+      product.variants = product.variants.map((variant) => {
+        const formatted = { ...variant };
+
+        Object.keys(variant).forEach((key) => {
+          // key = attributeId, variant[key] = choiceId
+          const choiceInfo = choiceMap[variant[key]];
+
+          if (choiceInfo) {
+            formatted[choiceInfo.attributeName] = choiceInfo.value;
+
+            // Remove raw IDs
+            delete formatted[key];
+          }
+        });
+
+        return formatted;
       });
     }
 
-    console.log("✅ Sending product data");
+    console.log("✅ Sending product data with variants resolved");
     res.send(product);
+
   } catch (err) {
     console.error("❌ Error in getProductById:", err.message);
     console.error("🔍 Error details:", err);
-    
-    // More specific error handling
-    if (err.name === 'CastError') {
+
+    if (err.name === "CastError") {
       return res.status(400).send({
         message: "Invalid product ID format",
       });
     }
-    
+
     res.status(500).send({
       message: err.message,
     });
